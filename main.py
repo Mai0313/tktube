@@ -1,30 +1,31 @@
+from bs4 import BeautifulSoup
 from pydantic import BaseModel
 import requests
-from bs4 import BeautifulSoup
+
 
 class Video(BaseModel):
     def get_main_urls(self, url) -> list[str]:
         response = requests.get(url)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
+            soup = BeautifulSoup(response.content, "html.parser")
             # 查找指定元素下的所有a标签
-            links_container = soup.select_one('#list_videos_common_videos_list_items')
+            links_container = soup.select_one("#list_videos_common_videos_list_items")
             if links_container:
-                links = links_container.find_all('a', href=True)
-                urls = [link['href'] for link in links]
+                links = links_container.find_all("a", href=True)
+                urls = [link["href"] for link in links]
                 return urls
             else:
                 return "指定的元素没有找到。"
         else:
             return "网页请求失败，状态码：" + str(response.status_code)
-        
+
     def get_video_url(self, url):
         response = requests.get(url)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            video = soup.select_one('video')
+            soup = BeautifulSoup(response.content, "html.parser")
+            video = soup.select_one("video")
             if video:
-                video_url = video['src']
+                video_url = video["src"]
                 return video_url
             else:
                 return "没有找到视频元素。"
@@ -34,7 +35,7 @@ class Video(BaseModel):
     def download_video(self, url, filename) -> str:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-            with open(filename, 'wb') as f:
+            with open(filename, "wb") as f:
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
                         f.write(chunk)
