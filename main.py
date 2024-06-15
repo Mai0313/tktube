@@ -1,10 +1,11 @@
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 import requests
+from playwright.sync_api import sync_playwright
 
 
 class Video(BaseModel):
-    def get_main_urls(self, url) -> list[str]:
+    def get_main_urls(self, url: str) -> list[str]:
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, "html.parser")
@@ -19,20 +20,26 @@ class Video(BaseModel):
         else:
             return "网页请求失败，状态码：" + str(response.status_code)
 
-    def get_video_url(self, url):
-        response = requests.get(url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, "html.parser")
-            video = soup.select_one("video")
-            if video:
-                video_url = video["src"]
-                return video_url
-            else:
-                return "没有找到视频元素。"
-        else:
-            return "网页请求失败，状态码：" + str(response.status_code)
+    def get_video_url(self, url: str) -> str:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(url)
 
-    def download_video(self, url, filename) -> str:
+            # 模拟点击
+            page.click("#kt_player > div.fp-player")
+            # 等待视频元素加载
+            page.wait_for_selector("#kt_player > div.fp-player > video")
+
+            # 获取视频的直接链接
+            video_url = page.query_selector("#kt_player > div.fp-player > video").get_attribute(
+                "src"
+            )
+
+            browser.close()
+        return video_url
+
+    def download_video(self, url: str, filename: str) -> str:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
             with open(filename, "wb") as f:
@@ -49,6 +56,6 @@ downloader = Video()
 url = "https://tktube.com/zh/categories/fc2/"
 main_urls = downloader.get_main_urls(url)
 for main_url in main_urls:
-    print(main_url)
     urls = downloader.get_video_url(main_url)
-    print(urls)
+    urls = downloader.download_video(urls, "test")
+    break
