@@ -1,2 +1,17 @@
 requests
+playwright
 beautifulsoup4
+
+# Data Validation
+pydantic
+
+# Develop Tools
+ipykernel
+ipywidgets
+pre-commit
+
+# Pytes Tools
+pytest
+pytest-cov
+pytest-asyncio
+genbadge[all]
