@@ -8,10 +8,7 @@ on:
   workflow_dispatch:
 
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: write-all
 
 jobs:
   auto-update:
@@ -23,16 +20,11 @@ jobs:
         run: git config --global http.sslVerify false
 
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5.1.0
-        with:
-          python-version: '3.10'
           token: ${{ secrets.GITHUB_TOKEN }}
-          cache: 'pip' # caching pip dependencies
+          fetch-depth: 1
+          submodules: 'recursive'
 
       - name: Update Pre-Commit
         uses: browniebroke/pre-commit-autoupdate-action@main
@@ -47,14 +39,14 @@ jobs:
         id: pre-commit-autoupdate
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: update/pre-commit-hooks
-          title: Update pre-commit hooks
+          branch: chore/pre-commit-hooks
+          title: 'chore: Update pre-commit hooks'
           commit-message: "chore: update pre-commit hooks"
           body: Update versions of pre-commit hooks to latest version.
 
       - name: Auto Merge Pull Request
         if: steps.pre-commit-autoupdate.outputs.pull-request-number
         run: |
-          gh pr merge --auto --merge update/pre-commit-hooks
+          gh pr merge --auto --merge chore/pre-commit-hooks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

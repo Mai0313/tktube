@@ -7,8 +7,10 @@ from playwright.sync_api import sync_playwright
 class Video(BaseModel):
     def get_main_urls(self, url: str) -> list[str]:
         response = requests.get(url)
+        print(response)
         soup = BeautifulSoup(response.content, "html.parser")
         links_container = soup.select_one("#list_videos_common_videos_list_items")
+        print(links_container)
         links = links_container.find_all("a", href=True)
         urls = [link["href"] for link in links]
         return urls
