@@ -63,7 +63,7 @@ class Video(BaseModel):
 
     def _get_cookies(self) -> None:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             page = context.new_page()
             page.goto(url)
@@ -79,7 +79,7 @@ class Video(BaseModel):
 
     def download_video(self, video_info: VideoModel) -> None:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             cookie_path = Path("cookies.json")
             if not cookie_path.exists():
