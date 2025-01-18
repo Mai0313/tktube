@@ -59,7 +59,7 @@ omit = ["./src/ameba/*"]
 # ================== #
 
 [project]
-name = "repo_template"
+name = "tktube"
 version = "1.0.0"
 description = "Repository template for Python projects"
 authors = [
@@ -71,14 +71,15 @@ dependencies = [
     "pydantic>=2.10.5",
     "pydantic-settings>=2.7.1",
     "requests>=2.32.3",
+    "rich>=13.9.4",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
 license = { text = "MIT" }
 
 [project.urls]
-Homepage = "https://github.com/Mai0313/repo_template"
-Repository = "https://github.com/Mai0313/repo_template"
+Homepage = "https://github.com/Mai0313/tktube"
+Repository = "https://github.com/Mai0313/tktube"
 
 [build-system]
 requires = ["hatchling", "hatch-fancy-pypi-readme"]
@@ -461,7 +462,7 @@ skip-magic-trailing-comma = true
 [tool.logfire]
 send_to_logfire = false
 token = false
-project_name = "repo_template"
+project_name = "tktube"
 trace_sample_rate = 1.0
 console_colors = "auto"
 console_span_style = "show-parents"
