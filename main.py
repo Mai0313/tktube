@@ -120,7 +120,6 @@ if __name__ == "__main__":
     config = Config()
     url = "https://tktube.com/zh/categories/fc2/"
     downloader = Video(url=url, username=config.username, password=config.password)
-    main_urls = downloader.get_main_urls(url)
+    main_urls = downloader.get_main_urls(url)[:3]
     for main_url in main_urls:
         downloader.download_video(main_url)
-        break
