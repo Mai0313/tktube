@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 from pathlib import Path
 
 from bs4 import BeautifulSoup
+import httpx
 from pydantic import BaseModel, model_validator
-import requests
 from rich.console import Console
 from playwright.sync_api import sync_playwright
 
@@ -32,6 +32,7 @@ class Video(BaseModel):
     url: str
     username: str
     password: str
+    output_path: str
 
     def get_main_urls(self, url: str) -> list[VideoModel]:
         with sync_playwright() as p:
@@ -77,6 +78,16 @@ class Video(BaseModel):
                 json.dump(cookies, f)
             browser.close()
 
+    def _download(self, title: str, download_link: str) -> str:
+        with httpx.stream("GET", download_link) as response:
+            output_path = Path(self.output_path)
+            output_path.mkdir(exist_ok=True, parents=True)
+            output_file = output_path / f"{title}.mp4"
+            with open(output_file, "wb") as f:
+                for chunk in response.iter_bytes():
+                    f.write(chunk)
+            return output_file.as_posix()
+
     def download_video(self, video_info: VideoModel) -> None:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -104,14 +115,7 @@ class Video(BaseModel):
                 download_link = download_button.get_attribute("href")
                 page.click("a[href*='download']")
             browser.close()
-
-        response = requests.get(download_link, stream=True)
-        output_path = Path("./data")
-        output_path.mkdir(exist_ok=True, parents=True)
-        with open(output_path / f"{video_info.title}.mp4", "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
+        self._download(title=video_info.title, download_link=download_link)
 
 
 if __name__ == "__main__":
@@ -119,7 +123,7 @@ if __name__ == "__main__":
 
     config = Config()
     url = "https://tktube.com/zh/categories/fc2/"
-    downloader = Video(url=url, username=config.username, password=config.password)
-    main_urls = downloader.get_main_urls(url)[:3]
+    downloader = Video(url=url, **config.model_dump())
+    main_urls = downloader.get_main_urls(url)[:1]
     for main_url in main_urls:
         downloader.download_video(main_url)
