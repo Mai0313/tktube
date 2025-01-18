@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 
 /data/
+cookies.json
 docker-compose.override.yaml
 
 /.github/reports/

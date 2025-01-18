@@ -1,7 +1,10 @@
+import re
+import json
 from typing import TYPE_CHECKING
+from pathlib import Path
 
 from bs4 import BeautifulSoup
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 import requests
 from rich.console import Console
 from playwright.sync_api import sync_playwright
@@ -17,8 +20,19 @@ class VideoModel(BaseModel):
     title: str
     rating: str
 
+    @model_validator(mode="after")
+    def _rename_title(self) -> "VideoModel":
+        pattern = r"[^\w\s\u4e00-\u9fff-]"
+        cleaned_title = re.sub(pattern, "", self.title)
+        self.title = cleaned_title.replace(" ", "_")
+        return self
+
 
 class Video(BaseModel):
+    url: str
+    username: str
+    password: str
+
     def get_main_urls(self, url: str) -> list[VideoModel]:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=False)
@@ -47,37 +61,66 @@ class Video(BaseModel):
         console.print(video_informations)
         return video_informations
 
+    def _get_cookies(self) -> None:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(url)
+            page.click("a[href='/login']")
+            page.fill("input[name='email']", f"{self.username}")
+            page.fill("input[name='password']", f"{self.password}")
+            page.click("button#submitlogin")
+            page.wait_for_load_state("networkidle")
+            cookies = context.cookies()
+            with open("cookies.json", "w") as f:
+                json.dump(cookies, f)
+            browser.close()
+
     def download_video(self, video_info: VideoModel) -> None:
-        response = requests.get(video_info.url, stream=True)
-        with open(f"test.mp4", "wb") as f:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context()
+            cookie_path = Path("cookies.json")
+            if not cookie_path.exists():
+                self._get_cookies()
+            with open("cookies.json") as f:
+                cookies = json.load(f)
+            context.add_cookies(cookies)
+
+            page = context.new_page()
+            page.goto("https://appscyborg.com/video-cyborg")
+
+            # 填写视频 URL
+            page.fill("input[name='url']", video_info.url)
+
+            # 点击下载按钮
+            page.click("button#singleinput")
+
+            # 等待下载按钮出现
+            download_button = page.wait_for_selector("a[href*='download']", timeout=60000)
+
+            if download_button:
+                download_link = download_button.get_attribute("href")
+                page.click("a[href*='download']")
+            browser.close()
+
+        response = requests.get(download_link, stream=True)
+        output_path = Path("./data")
+        output_path.mkdir(exist_ok=True, parents=True)
+        with open(output_path / f"{video_info.title}.mp4", "wb") as f:
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
 
-    def get_video_urls(self, urls: list[str]) -> list[str]:
-        video_urls = []
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)  # 设置headless=False可以看到浏览器操作过程
-            for url in urls:
-                page = browser.new_page()
-                page.goto(url)
-                # 使用 JavaScript 直接触发点击事件
-                selector = "#kt_player > div.fp-player > div.fp-ui"
-                page.wait_for_selector(selector)
-                page.evaluate(f"""document.querySelector('{selector}').click()""")
-                # 等待视频元素加载
-                video_selector = "#kt_player > div.fp-player > video"
-                page.wait_for_selector(video_selector)
-                video_url = page.get_attribute(video_selector, "src")
-                if video_url:
-                    video_urls.append(video_url)
-                page.close()
-            browser.close()
-        console.print(video_urls)
-        return video_urls
-
 
 if __name__ == "__main__":
-    downloader = Video()
+    from src.config import Config
+
+    config = Config()
     url = "https://tktube.com/zh/categories/fc2/"
+    downloader = Video(url=url, username=config.username, password=config.password)
     main_urls = downloader.get_main_urls(url)
+    for main_url in main_urls:
+        downloader.download_video(main_url)
+        break
