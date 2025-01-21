@@ -11,8 +11,6 @@ import pandas as pd
 from pydantic import BaseModel, model_validator
 from src.config import Config
 from rich.console import Console
-
-# 改用 async 版本的 playwright
 from playwright.async_api import async_playwright
 
 if TYPE_CHECKING:
@@ -60,23 +58,58 @@ class Video(BaseModel):
             # 將提取的數據存入 VideoModel
             video_informations.append(VideoModel(url=link["href"], rating=rating, title=title))
 
-        console.print(video_informations)
-        video_informations_list = [vi.model_dump() for vi in video_informations]
-        data = pd.DataFrame(video_informations_list)
-        log_path = Path(self.output_path)
-        log_path.mkdir(exist_ok=True, parents=True)
-        data.to_csv(log_path / "log.csv", index=False)
         return video_informations
 
-    async def get_main_urls(self, url: str) -> list[VideoModel]:
+    async def get_main_urls(self, url: str, max_pages: int = 0) -> list[VideoModel]:
+        all_contents = []  # 用來存放所有頁面的 HTML
+        current_page = 1  # 記錄現在爬到第幾頁
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=False)
             page = await browser.new_page()
             await page.goto(url)
-            content = await page.content()
+
+            while True:
+                # 1) 取得當前頁面的 HTML
+                content = await page.content()
+                all_contents.append(content)
+
+                # 2) 判斷是否已達 max_pages 上限（若 max_pages = 0，則不限制）
+                if max_pages != 0 and current_page >= max_pages:
+                    break
+
+                # 3) 嘗試取得「下一頁」按鈕
+                next_button = await page.query_selector(
+                    'a[data-action="ajax"][data-container-id="list_videos_common_videos_list_pagination"]'
+                )
+                if not next_button:
+                    # 沒有下一頁按鈕，跳出迴圈
+                    break
+
+                # 4) 點擊「下一頁」並等待更新完成（可酌情改用 wait_for_selector / wait_for_load_state 等）
+                await next_button.click()
+                await page.wait_for_timeout(10000)
+
+                current_page += 1
+
+            # 關閉瀏覽器
             await browser.close()
-        video_informations = await self.parse_content(content=content)
-        return video_informations
+
+        # --- 所有頁面內容收集完畢，開始逐一 parse ---
+        all_videos: list[VideoModel] = []
+        for html_content in all_contents:
+            video_informations = await self.parse_content(html_content)
+            all_videos.extend(video_informations)
+
+        # --- 統一把所有結果寫入 CSV ---
+        console.print(all_videos)
+        video_informations_list = [vi.model_dump() for vi in all_videos]
+        data = pd.DataFrame(video_informations_list)
+        log_path = Path(self.output_path)
+        log_path.mkdir(exist_ok=True, parents=True)
+        data.to_csv(log_path / "log.csv", index=False)
+
+        return all_videos
 
     async def _get_cookies(self) -> None:
         async with async_playwright() as p:
@@ -169,7 +202,6 @@ async def main(config: Config, max_processor: int, max_videos: int) -> None:
     url = "https://tktube.com/zh/categories/fc2/"
     downloader = Video(url=url, **config.model_dump())
     main_urls = await downloader.get_main_urls(url)
-    main_urls = main_urls[:max_videos]
     sem = asyncio.Semaphore(max_processor)
     tasks = []
     for video_info in main_urls:
