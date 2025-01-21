@@ -69,6 +69,7 @@ dependencies = [
     "aiohttp>=3.11.11",
     "beautifulsoup4>=4.12.3",
     "httpx>=0.28.1",
+    "pandas>=2.2.3",
     "playwright>=1.49.1",
     "pydantic>=2.10.5",
     "pydantic-settings>=2.7.1",
