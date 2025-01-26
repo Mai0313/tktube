@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import anyio
 import httpx
 import pandas as pd
-from pydantic import BaseModel, model_validator
+from pydantic import Field, BaseModel, model_validator
 from src.config import Config
 from rich.console import Console
 from playwright.async_api import async_playwright
@@ -200,18 +200,22 @@ class Video(BaseModel):
                 console.print(f"[red]無法取得下載連結[/red]：{video_info.url}")
 
 
-async def main(config: Config, max_processor: int) -> None:
-    url = "https://tktube.com/zh/categories/fc2/"
-    downloader = Video(url=url, **config.model_dump())
-    main_urls = await downloader.get_main_urls(url=url, max_pages=0, proxy=None)
-    sem = asyncio.Semaphore(max_processor)
-    tasks = []
-    for video_info in main_urls:
-        tasks.append(asyncio.create_task(downloader.download_video(video_info, sem)))
-    await asyncio.gather(*tasks)
+class TKTubeDownloader(BaseModel):
+    config: Config = Field(default_factory=Config)
+    max_processor: int = Field(default=5)
+
+    async def __call__(self) -> None:
+        url = "https://tktube.com/zh/categories/fc2/"
+        downloader = Video(url=url, **self.config.model_dump())
+        main_urls = await downloader.get_main_urls(url=url, max_pages=0, proxy=None)
+        sem = asyncio.Semaphore(self.max_processor)
+        tasks = []
+        for video_info in main_urls:
+            tasks.append(asyncio.create_task(downloader.download_video(video_info, sem)))
+        await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":
-    config = Config()
+    downloader = TKTubeDownloader(max_processor=5)
 
-    asyncio.run(main(config=config, max_processor=5))
+    asyncio.run(downloader())
