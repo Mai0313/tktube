@@ -198,10 +198,10 @@ class Video(BaseModel):
                 console.print(f"[red]無法取得下載連結[/red]：{video_info.url}")
 
 
-async def main(config: Config, max_processor: int, max_videos: int) -> None:
+async def main(config: Config, max_processor: int) -> None:
     url = "https://tktube.com/zh/categories/fc2/"
     downloader = Video(url=url, **config.model_dump())
-    main_urls = await downloader.get_main_urls(url)
+    main_urls = await downloader.get_main_urls(url=url, max_pages=0)
     sem = asyncio.Semaphore(max_processor)
     tasks = []
     for video_info in main_urls:
@@ -212,4 +212,4 @@ async def main(config: Config, max_processor: int, max_videos: int) -> None:
 if __name__ == "__main__":
     config = Config()
 
-    asyncio.run(main(config=config, max_processor=5, max_videos=5))
+    asyncio.run(main(config=config, max_processor=5))
