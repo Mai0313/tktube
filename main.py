@@ -68,7 +68,25 @@ class Video(BaseModel):
         log_path.mkdir(exist_ok=True, parents=True)
         data.to_csv(log_path / "log.csv", index=False)
 
-    async def get_main_urls(
+    async def _get_proxy(self) -> list[ProxySettings]:
+        async with httpx.AsyncClient(
+            base_url="https://proxy.webshare.io/api/v2/proxy/list/download"
+        ) as client:
+            response = await client.get(
+                url="/gkmrbxannulbzoivxifatgbzdgkymmtncseladci/-/any/username/direct/-/"
+            )
+            response_string = response.text
+            response_list = response_string.split("\r\n")
+            response_list = [f.split(":db") for f in response_list if f]
+            proxy_list = []
+            for res in response_list:
+                ip_address, username_password = res
+                username, password = username_password.split(":")
+                proxy = ProxySettings(server=ip_address, username=username, password=password)
+                proxy_list.append(proxy)
+        return proxy_list
+
+    async def get_urls(
         self, url: str, max_pages: int, proxy: ProxySettings | None
     ) -> list[VideoModel]:
         all_contents = []  # 用來存放所有頁面的 HTML
@@ -149,7 +167,7 @@ class Video(BaseModel):
         console.print(f"[green]下載完成:[/green] {output_file.as_posix()}")
         return output_file.as_posix()
 
-    async def download_video(self, video_info: VideoModel, sem: asyncio.Semaphore) -> None:
+    async def download(self, video_info: VideoModel, sem: asyncio.Semaphore) -> None:
         """非同步下載單部影片的流程：
         1. 取得或載入 cookies
         2. 使用 cookies 訪問下載頁面
@@ -206,12 +224,12 @@ class TKTubeDownloader(BaseModel):
 
     async def __call__(self) -> None:
         url = "https://tktube.com/zh/categories/fc2/"
-        downloader = Video(url=url, **self.config.model_dump())
-        main_urls = await downloader.get_main_urls(url=url, max_pages=0, proxy=None)
+        video_downloader = Video(url=url, **self.config.model_dump())
+        main_urls = await video_downloader.get_urls(url=url, max_pages=0, proxy=None)
         sem = asyncio.Semaphore(self.max_processor)
         tasks = []
         for video_info in main_urls:
-            tasks.append(asyncio.create_task(downloader.download_video(video_info, sem)))
+            tasks.append(asyncio.create_task(video_downloader.download(video_info, sem)))
         await asyncio.gather(*tasks)
 
 
