@@ -12,6 +12,7 @@ from pydantic import BaseModel, model_validator
 from src.config import Config
 from rich.console import Console
 from playwright.async_api import async_playwright
+from playwright._impl._api_structures import ProxySettings
 
 if TYPE_CHECKING:
     from bs4.element import Tag
@@ -38,7 +39,7 @@ class Video(BaseModel):
     password: str
     output_path: str
 
-    async def parse_content(self, content: str) -> list[VideoModel]:
+    async def _parse_content(self, content: str) -> list[VideoModel]:
         soup = BeautifulSoup(content, "html.parser")
 
         # 獲取包含所有視頻鏈接的容器
@@ -60,12 +61,21 @@ class Video(BaseModel):
 
         return video_informations
 
-    async def get_main_urls(self, url: str, max_pages: int = 0) -> list[VideoModel]:
+    async def _record_video_info(self, all_videos: list[VideoModel]) -> None:
+        video_informations_list = [vi.model_dump() for vi in all_videos]
+        data = pd.DataFrame(video_informations_list)
+        log_path = Path(self.output_path)
+        log_path.mkdir(exist_ok=True, parents=True)
+        data.to_csv(log_path / "log.csv", index=False)
+
+    async def get_main_urls(
+        self, url: str, max_pages: int, proxy: ProxySettings | None
+    ) -> list[VideoModel]:
         all_contents = []  # 用來存放所有頁面的 HTML
         current_page = 1  # 記錄現在爬到第幾頁
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=False, proxy=proxy)
             page = await browser.new_page()
             await page.goto(url)
 
@@ -89,26 +99,16 @@ class Video(BaseModel):
                 # 4) 點擊「下一頁」並等待更新完成（可酌情改用 wait_for_selector / wait_for_load_state 等）
                 await next_button.click()
                 await page.wait_for_timeout(10000)
-
                 current_page += 1
-
-            # 關閉瀏覽器
             await browser.close()
 
         # --- 所有頁面內容收集完畢，開始逐一 parse ---
         all_videos: list[VideoModel] = []
         for html_content in all_contents:
-            video_informations = await self.parse_content(html_content)
+            video_informations = await self._parse_content(html_content)
             all_videos.extend(video_informations)
-
         # --- 統一把所有結果寫入 CSV ---
-        console.print(all_videos)
-        video_informations_list = [vi.model_dump() for vi in all_videos]
-        data = pd.DataFrame(video_informations_list)
-        log_path = Path(self.output_path)
-        log_path.mkdir(exist_ok=True, parents=True)
-        data.to_csv(log_path / "log.csv", index=False)
-
+        await self._record_video_info(all_videos=all_videos)
         return all_videos
 
     async def _get_cookies(self) -> None:
@@ -138,11 +138,13 @@ class Video(BaseModel):
 
         output_file = output_path / f"{title}.mp4"
 
-        async with httpx.AsyncClient() as client:
-            async with client.stream("GET", download_link) as response:
-                async with await anyio.open_file(output_file, "wb") as f:
-                    async for chunk in response.aiter_bytes():
-                        await f.write(chunk)
+        async with (
+            httpx.AsyncClient() as client,
+            client.stream("GET", download_link) as response,
+            await anyio.open_file(output_file, "wb") as f,
+        ):
+            async for chunk in response.aiter_bytes():
+                await f.write(chunk)
 
         console.print(f"[green]下載完成:[/green] {output_file.as_posix()}")
         return output_file.as_posix()
@@ -201,7 +203,7 @@ class Video(BaseModel):
 async def main(config: Config, max_processor: int) -> None:
     url = "https://tktube.com/zh/categories/fc2/"
     downloader = Video(url=url, **config.model_dump())
-    main_urls = await downloader.get_main_urls(url=url, max_pages=0)
+    main_urls = await downloader.get_main_urls(url=url, max_pages=0, proxy=None)
     sem = asyncio.Semaphore(max_processor)
     tasks = []
     for video_info in main_urls:
