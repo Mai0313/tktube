@@ -225,7 +225,8 @@ class TKTubeDownloader(BaseModel):
     async def __call__(self) -> None:
         url = "https://tktube.com/zh/categories/fc2/"
         video_downloader = Video(url=url, **self.config.model_dump())
-        main_urls = await video_downloader.get_urls(url=url, max_pages=0, proxy=None)
+        # proxies = await video_downloader._get_proxy()
+        main_urls = await video_downloader.get_urls(url=url, max_pages=10, proxy=None)
         sem = asyncio.Semaphore(self.max_processor)
         tasks = []
         for video_info in main_urls:
